@@ -36,7 +36,7 @@ const S: f32 = 0.22; // Sixteenth note
 const E: f32 = 0.44; // Eighth note
 
 // Fur Elise Main Theme
-const SONG: &[(f32, f32)] = &[
+const FUR_ELISE: &[(f32, f32)] = &[
     // Phrase 1
     (E5, S), (D_SHARP_5, S), (E5, S), (D_SHARP_5, S), (E5, S), (B4, S), (D5, S), (C5, S), (A4, E),
     (C4, S), (E4, S), (A4, S), (B4, E),
@@ -305,14 +305,17 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
 fn main() {
     let mut all_variations = Vec::new();
 
+    // Fur Elise
+    all_variations.extend(generate_variations("fur_elise", vec![FUR_ELISE]));
+
+    // Ode to Joy
+    all_variations.extend(generate_variations("ode_to_joy", vec![ODE_TO_JOY]));
+
     // Fur Elise (Polyphonic)
-    all_variations.extend(generate_variations("fur_elise", vec![SONG, FUR_ELISE_HARMONY]));
+    all_variations.extend(generate_variations("fur_elise_harmony", vec![FUR_ELISE, FUR_ELISE_HARMONY]));
 
     // Ode to Joy (Polyphonic)
-    all_variations.extend(generate_variations(
-        "ode_to_joy",
-        vec![ODE_TO_JOY, ODE_TO_JOY_HARMONY],
-    ));
+    all_variations.extend(generate_variations("ode_to_joy_harmony", vec![ODE_TO_JOY, ODE_TO_JOY_HARMONY]));
 
     // Generate JSON
     let json_items: Vec<String> = all_variations

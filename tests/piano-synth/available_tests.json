@@ -21,7 +21,7 @@
     "filename": "fur_elise_missed_notes.wav",
     "ideal_filename": "fur_elise.wav",
     "expected_tempo_accuracy": 1.00,
-    "expected_pitch_accuracy": 0.96
+    "expected_pitch_accuracy": 0.94
   },
   {
     "filename": "ode_to_joy.wav",
@@ -44,6 +44,54 @@
   {
     "filename": "ode_to_joy_missed_notes.wav",
     "ideal_filename": "ode_to_joy.wav",
+    "expected_tempo_accuracy": 1.00,
+    "expected_pitch_accuracy": 0.87
+  },
+  {
+    "filename": "fur_elise_harmony.wav",
+    "ideal_filename": "fur_elise_harmony.wav",
+    "expected_tempo_accuracy": 1.00,
+    "expected_pitch_accuracy": 1.00
+  },
+  {
+    "filename": "fur_elise_harmony_fast.wav",
+    "ideal_filename": "fur_elise_harmony.wav",
+    "expected_tempo_accuracy": 0.85,
+    "expected_pitch_accuracy": 1.00
+  },
+  {
+    "filename": "fur_elise_harmony_slow.wav",
+    "ideal_filename": "fur_elise_harmony.wav",
+    "expected_tempo_accuracy": 0.90,
+    "expected_pitch_accuracy": 1.00
+  },
+  {
+    "filename": "fur_elise_harmony_missed_notes.wav",
+    "ideal_filename": "fur_elise_harmony.wav",
+    "expected_tempo_accuracy": 1.00,
+    "expected_pitch_accuracy": 0.96
+  },
+  {
+    "filename": "ode_to_joy_harmony.wav",
+    "ideal_filename": "ode_to_joy_harmony.wav",
+    "expected_tempo_accuracy": 1.00,
+    "expected_pitch_accuracy": 1.00
+  },
+  {
+    "filename": "ode_to_joy_harmony_fast.wav",
+    "ideal_filename": "ode_to_joy_harmony.wav",
+    "expected_tempo_accuracy": 0.85,
+    "expected_pitch_accuracy": 1.00
+  },
+  {
+    "filename": "ode_to_joy_harmony_slow.wav",
+    "ideal_filename": "ode_to_joy_harmony.wav",
+    "expected_tempo_accuracy": 0.90,
+    "expected_pitch_accuracy": 1.00
+  },
+  {
+    "filename": "ode_to_joy_harmony_missed_notes.wav",
+    "ideal_filename": "ode_to_joy_harmony.wav",
     "expected_tempo_accuracy": 1.00,
     "expected_pitch_accuracy": 0.89
   }
