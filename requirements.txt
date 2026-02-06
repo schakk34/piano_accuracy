@@ -3,3 +3,4 @@ librosa
 scipy
 scikit-image
 matplotlib
+ipykernel
