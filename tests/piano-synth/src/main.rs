@@ -192,11 +192,46 @@ impl Processors {
     }
 }
 
+fn freq_to_name(freq: f32) -> String {
+    if freq < 1.0 {
+        return "Rest".to_string();
+    }
+    let epsilon = 0.1;
+    if (freq - E2).abs() < epsilon { return "E2".to_string(); }
+    if (freq - A2).abs() < epsilon { return "A2".to_string(); }
+    if (freq - C3).abs() < epsilon { return "C3".to_string(); }
+    if (freq - E3).abs() < epsilon { return "E3".to_string(); }
+    if (freq - G3).abs() < epsilon { return "G3".to_string(); }
+    if (freq - G_SHARP_3).abs() < epsilon { return "G#3".to_string(); }
+    if (freq - A3).abs() < epsilon { return "A3".to_string(); }
+    if (freq - C4).abs() < epsilon { return "C4".to_string(); }
+    if (freq - D4).abs() < epsilon { return "D4".to_string(); }
+    if (freq - E4).abs() < epsilon { return "E4".to_string(); }
+    if (freq - F4).abs() < epsilon { return "F4".to_string(); }
+    if (freq - G4).abs() < epsilon { return "G4".to_string(); }
+    if (freq - G_SHARP_4).abs() < epsilon { return "G#4".to_string(); }
+    if (freq - A4).abs() < epsilon { return "A4".to_string(); }
+    if (freq - B4).abs() < epsilon { return "B4".to_string(); }
+    if (freq - C5).abs() < epsilon { return "C5".to_string(); }
+    if (freq - D5).abs() < epsilon { return "D5".to_string(); }
+    if (freq - D_SHARP_5).abs() < epsilon { return "D#5".to_string(); }
+    if (freq - E5).abs() < epsilon { return "E5".to_string(); }
+
+    format!("{:.2} Hz", freq)
+}
+
+struct NoteInfo {
+    name: String,
+    freq: f32,
+    duration: f32,
+}
+
 struct VariationInfo {
     filename: String,
     ideal_filename: String,
     tempo_accuracy: f32,
     pitch_accuracy: f32,
+    notes: Vec<Vec<NoteInfo>>,
 }
 
 fn generate(filename: &str, tracks: Vec<&[(f32, f32)]>, speed_mult: f32) {
@@ -228,6 +263,22 @@ fn generate(filename: &str, tracks: Vec<&[(f32, f32)]>, speed_mult: f32) {
 fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<VariationInfo> {
     let mut variations = Vec::new();
 
+    let get_notes = |tracks: &[&[(f32, f32)]], speed_mult: f32| -> Vec<Vec<NoteInfo>> {
+        tracks
+            .iter()
+            .map(|track| {
+                track
+                    .iter()
+                    .map(|(freq, dur)| NoteInfo {
+                        name: freq_to_name(*freq),
+                        freq: *freq,
+                        duration: *dur * speed_mult,
+                    })
+                    .collect()
+            })
+            .collect()
+    };
+
     // 1. Original
     let original_filename = format!("{}.wav", base_name);
     generate(&original_filename, tracks.clone(), 1.0);
@@ -236,26 +287,31 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
         ideal_filename: original_filename.clone(),
         tempo_accuracy: 1.0,
         pitch_accuracy: 1.0,
+        notes: get_notes(&tracks, 1.0),
     });
 
     // 2. Fast (1.15x speed)
+    let speed_fast = 1.0 / 1.15;
     let filename = format!("{}_fast.wav", base_name);
-    generate(&filename, tracks.clone(), 1.0 / 1.15);
+    generate(&filename, tracks.clone(), speed_fast);
     variations.push(VariationInfo {
         filename,
         ideal_filename: original_filename.clone(),
         tempo_accuracy: 0.85,
         pitch_accuracy: 1.0,
+        notes: get_notes(&tracks, speed_fast),
     });
 
     // 3. Slow (0.9x speed)
+    let speed_slow = 1.0 / 0.90;
     let filename = format!("{}_slow.wav", base_name);
-    generate(&filename, tracks.clone(), 1.0 / 0.90);
+    generate(&filename, tracks.clone(), speed_slow);
     variations.push(VariationInfo {
         filename,
         ideal_filename: original_filename.clone(),
         tempo_accuracy: 0.90,
         pitch_accuracy: 1.0,
+        notes: get_notes(&tracks, speed_slow),
     });
 
     // 4. Missed Notes (Melody only)
@@ -288,7 +344,7 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
         missed_tracks.extend_from_slice(&tracks[1..]);
 
         let filename = format!("{}_missed_notes.wav", base_name);
-        generate(&filename, missed_tracks, 1.0);
+        generate(&filename, missed_tracks.clone(), 1.0);
 
         variations.push(VariationInfo {
             filename,
@@ -296,6 +352,7 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
             tempo_accuracy: 1.0,
             pitch_accuracy: (total_playable_notes - missed_count) as f32
                 / total_playable_notes as f32,
+            notes: get_notes(&missed_tracks, 1.0),
         });
     }
 
@@ -321,9 +378,28 @@ fn main() {
     let json_items: Vec<String> = all_variations
         .iter()
         .map(|v| {
+            let tracks_json = v
+                .notes
+                .iter()
+                .map(|track| {
+                    let notes_json = track
+                        .iter()
+                        .map(|note| {
+                            format!(
+                                "{{\"name\": \"{}\", \"frequency\": {:.2}, \"duration\": {:.3}}}",
+                                note.name, note.freq, note.duration
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    format!("[{}]", notes_json)
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
             format!(
-                "  {{\n    \"filename\": \"{}\",\n    \"ideal_filename\": \"{}\",\n    \"expected_tempo_accuracy\": {:.2},\n    \"expected_pitch_accuracy\": {:.2}\n  }}",
-                v.filename, v.ideal_filename, v.tempo_accuracy, v.pitch_accuracy
+                "  {{\n    \"filename\": \"{}\",\n    \"ideal_filename\": \"{}\",\n    \"expected_tempo_accuracy\": {:.2},\n    \"expected_pitch_accuracy\": {:.2},\n    \"notes\": [{}]\n  }}",
+                v.filename, v.ideal_filename, v.tempo_accuracy, v.pitch_accuracy, tracks_json
             )
         })
         .collect();

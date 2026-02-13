@@ -4,7 +4,7 @@
 This directory contains the Rust source to synthesize piano songs using Twang.
 
 ## Test usage
-At the time of writing, this testing harness only supports testing the pitch and tempo accuracy percentage scores. More through testing will be forthcoming.
+### Test Accuracy Scores
 
 In the relavent notebook, create a function that follows this signature (the actual name of the method is not relavent and only needs to be consistent with the next step):
 ```python
@@ -26,6 +26,15 @@ tests.run_all_tests(analyze_accuracy)
 The testing code should run and print your test results. The defualt tolerance is to be within 0.05 of the target values.
 
 The target values are a guess based on the errors introduced into the files, and may not be fully correct.
+
+### Test Note Seperation 
+Create a unified method that follows this signature:
+```python 
+states, boundaries = algo(filepath, frequencies, durations, sr, hop_length)
+```
+Where:
+- `states`: Array with `len(states) == len(frames)`, with each value being equal to the state. Ie, the `path` from the Viterbi decoded state vs time graphs.
+- `boundries`: Array of frame numbers that correspond to note changes, ie, the `boundry_frames` from the spectograms.
 
 ## Objectives
 - [ ] Parse MusicXML to capture notes, durations, etc, and turn that into a list of notes and their durations for synthesis with Twang and as the HMM model. Theoretically this will enable us to parse any sheet music and automatically generate test cases, an ideal version of the song, and the weights of an HMM model to analyze the end user's performance.

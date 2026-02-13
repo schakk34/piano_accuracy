@@ -8,3 +8,4 @@ source .venv/bin/activate #activate env
 pip install -r requirements.txt
 ```
 
+Please see tests/README.md for information about the testing suite.
