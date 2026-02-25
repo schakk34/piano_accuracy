@@ -279,6 +279,15 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
             .collect()
     };
 
+    let count_playable_notes = |tracks: &[&[(f32, f32)]]| -> usize {
+        tracks
+            .iter()
+            .map(|t| t.iter().filter(|(f, _)| *f > 0.0).count())
+            .sum()
+    };
+
+    let total_playable_notes = count_playable_notes(&tracks);
+
     // 1. Original
     let original_filename = format!("{}.wav", base_name);
     generate(&original_filename, tracks.clone(), 1.0);
@@ -317,15 +326,9 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
     // 4. Missed Notes (Melody only)
     if !tracks.is_empty() {
         let mut melody = tracks[0].to_vec();
-        // Count total playable notes across all tracks (ignoring rests/0.0 freq)
-        let total_playable_notes: usize = tracks
-            .iter()
-            .map(|t| t.iter().filter(|(f, _)| *f > 0.0).count())
-            .sum();
         let mut missed_count = 0;
 
         if melody.len() > 12 {
-            // Set frequency to 0.0 to simulate missed note
             if let Some(note) = melody.get_mut(4) {
                 if note.0 > 0.0 {
                     note.0 = 0.0;
@@ -343,7 +346,7 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
         let mut missed_tracks = vec![melody.as_slice()];
         missed_tracks.extend_from_slice(&tracks[1..]);
 
-        let filename = format!("{}_missed_notes.wav", base_name);
+        let filename = format!("{}_missed_melody.wav", base_name);
         generate(&filename, missed_tracks.clone(), 1.0);
 
         variations.push(VariationInfo {
@@ -353,6 +356,229 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
             pitch_accuracy: (total_playable_notes - missed_count) as f32
                 / total_playable_notes as f32,
             notes: get_notes(&missed_tracks, 1.0),
+        });
+    }
+
+    // 5. Missed Notes (Harmony only)
+    if tracks.len() >= 2 {
+        let mut harmony = tracks[1].to_vec();
+        let mut missed_count = 0;
+
+        // Try to remove a couple of notes
+        let indices_to_remove = [1, 3, 5];
+        for &i in &indices_to_remove {
+            if i < harmony.len() {
+                if harmony[i].0 > 0.0 {
+                    harmony[i].0 = 0.0;
+                    missed_count += 1;
+                }
+            }
+        }
+
+        let mut missed_tracks = vec![tracks[0]];
+        let harmony_slice = harmony.as_slice();
+        missed_tracks.push(harmony_slice);
+        if tracks.len() > 2 {
+            missed_tracks.extend_from_slice(&tracks[2..]);
+        }
+
+        let filename = format!("{}_missed_harmony.wav", base_name);
+        generate(&filename, missed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes - missed_count) as f32
+                / total_playable_notes as f32,
+            notes: get_notes(&missed_tracks, 1.0),
+        });
+    }
+
+    // 6. Missed Notes (Both)
+    if tracks.len() >= 2 {
+        let mut melody = tracks[0].to_vec();
+        let mut harmony = tracks[1].to_vec();
+        let mut missed_count = 0;
+
+        // Melody misses
+        if melody.len() > 12 {
+            if let Some(note) = melody.get_mut(4) {
+                if note.0 > 0.0 { note.0 = 0.0; missed_count += 1; }
+            }
+        }
+
+        // Harmony misses
+        if harmony.len() > 1 {
+            if harmony[1].0 > 0.0 { harmony[1].0 = 0.0; missed_count += 1; }
+        }
+
+        let mut missed_tracks = vec![melody.as_slice(), harmony.as_slice()];
+        if tracks.len() > 2 {
+            missed_tracks.extend_from_slice(&tracks[2..]);
+        }
+
+        let filename = format!("{}_missed_both.wav", base_name);
+        generate(&filename, missed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes - missed_count) as f32
+                / total_playable_notes as f32,
+            notes: get_notes(&missed_tracks, 1.0),
+        });
+    }
+
+    // 7. Incorrect Notes (Melody)
+    if !tracks.is_empty() {
+        let mut melody = tracks[0].to_vec();
+        let mut incorrect_count = 0;
+
+        if melody.len() > 10 {
+            if let Some(note) = melody.get_mut(5) {
+                if note.0 > 0.0 {
+                    note.0 += 20.0; // Detune
+                    incorrect_count += 1;
+                }
+            }
+            if let Some(note) = melody.get_mut(10) {
+                if note.0 > 0.0 {
+                    note.0 -= 20.0; // Detune
+                    incorrect_count += 1;
+                }
+            }
+        }
+
+        let mut mod_tracks = vec![melody.as_slice()];
+        mod_tracks.extend_from_slice(&tracks[1..]);
+
+        let filename = format!("{}_incorrect_melody.wav", base_name);
+        generate(&filename, mod_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes - incorrect_count) as f32
+                / total_playable_notes as f32,
+            notes: get_notes(&mod_tracks, 1.0),
+        });
+    }
+
+    // 8. Incorrect Notes (Harmony)
+    if tracks.len() >= 2 {
+        let mut harmony = tracks[1].to_vec();
+        let mut incorrect_count = 0;
+
+        // Modify a couple of notes
+        let indices = [0, 2];
+        for &i in &indices {
+             if i < harmony.len() {
+                if harmony[i].0 > 0.0 {
+                    harmony[i].0 += 30.0;
+                    incorrect_count += 1;
+                }
+             }
+        }
+
+        let mut mod_tracks = vec![tracks[0]];
+        let harmony_slice = harmony.as_slice();
+        mod_tracks.push(harmony_slice);
+        if tracks.len() > 2 {
+            mod_tracks.extend_from_slice(&tracks[2..]);
+        }
+
+        let filename = format!("{}_incorrect_harmony.wav", base_name);
+        generate(&filename, mod_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes - incorrect_count) as f32
+                / total_playable_notes as f32,
+            notes: get_notes(&mod_tracks, 1.0),
+        });
+    }
+
+    // 9. Incorrect Notes (Both)
+    if tracks.len() >= 2 {
+        let mut melody = tracks[0].to_vec();
+        let mut harmony = tracks[1].to_vec();
+        let mut incorrect_count = 0;
+
+        if melody.len() > 8 {
+            if melody[8].0 > 0.0 { melody[8].0 += 20.0; incorrect_count += 1; }
+        }
+        if harmony.len() > 2 {
+             if harmony[2].0 > 0.0 { harmony[2].0 += 20.0; incorrect_count += 1; }
+        }
+
+        let mut mod_tracks = vec![melody.as_slice(), harmony.as_slice()];
+        if tracks.len() > 2 {
+            mod_tracks.extend_from_slice(&tracks[2..]);
+        }
+
+        let filename = format!("{}_incorrect_both.wav", base_name);
+        generate(&filename, mod_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes - incorrect_count) as f32
+                / total_playable_notes as f32,
+            notes: get_notes(&mod_tracks, 1.0),
+        });
+    }
+
+    // 10. Harmony Out of Sync (Slightly Late)
+    if tracks.len() >= 2 {
+        let mut harmony = vec![(0.0, 0.15)]; // 150ms delay
+        harmony.extend_from_slice(tracks[1]);
+        
+        let mut mod_tracks = vec![tracks[0]];
+        let harmony_slice = harmony.as_slice();
+        mod_tracks.push(harmony_slice);
+        if tracks.len() > 2 {
+            mod_tracks.extend_from_slice(&tracks[2..]);
+        }
+
+        let filename = format!("{}_sync_slight_lag.wav", base_name);
+        generate(&filename, mod_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: 1.0,
+            notes: get_notes(&mod_tracks, 1.0),
+        });
+    }
+
+    // 11. Harmony Out of Sync (Very Late)
+    if tracks.len() >= 2 {
+        let mut harmony = vec![(0.0, 0.35)]; // 350ms delay
+        harmony.extend_from_slice(tracks[1]);
+        
+        let mut mod_tracks = vec![tracks[0]];
+        let harmony_slice = harmony.as_slice();
+        mod_tracks.push(harmony_slice);
+        if tracks.len() > 2 {
+            mod_tracks.extend_from_slice(&tracks[2..]);
+        }
+
+        let filename = format!("{}_sync_major_lag.wav", base_name);
+        generate(&filename, mod_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: 1.0,
+            notes: get_notes(&mod_tracks, 1.0),
         });
     }
 

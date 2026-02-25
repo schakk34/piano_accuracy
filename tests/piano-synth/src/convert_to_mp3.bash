@@ -25,7 +25,7 @@ for wav_file in *.wav; do
         # -y: Overwrite output files
         # -codec:a libmp3lame: Use LAME encoder
         # -qscale:a 2: Variable bit rate (High quality, roughly 190kbps)
-        ffmpeg -y -i "$wav_file" -codec:a libmp3lame -qscale:a 2 "$filename.mp3" < /dev/null
+        ffmpeg -hide_banner -loglevel error -y -i "$wav_file" -codec:a libmp3lame -qscale:a 2 "$filename.mp3" < /dev/null
     fi
 done
 
