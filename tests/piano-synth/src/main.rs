@@ -582,6 +582,269 @@ fn generate_variations(base_name: &str, tracks: Vec<&[(f32, f32)]>) -> Vec<Varia
         });
     }
 
+    // 12. Extra Notes (Melody - Simultaneous/Fat Finger)
+    if !tracks.is_empty() {
+        let melody = tracks[0];
+        let mut extra_track = Vec::new();
+        let mut extra_count = 0;
+        let indices = [2, 9, 14];
+
+        for (i, &(freq, dur)) in melody.iter().enumerate() {
+            if indices.contains(&i) && freq > 0.0 {
+                // Add a "fat finger" note (semitone up) for a short duration at the start
+                let fat_freq = freq * 1.05946; 
+                let fat_dur = 0.1;
+                if dur > fat_dur {
+                    extra_track.push((fat_freq, fat_dur));
+                    extra_track.push((0.0, dur - fat_dur));
+                } else {
+                    extra_track.push((fat_freq, dur));
+                }
+                extra_count += 1;
+            } else {
+                extra_track.push((0.0, dur));
+            }
+        }
+
+        let mut mixed_tracks = tracks.to_vec();
+        let extra_slice = extra_track.as_slice();
+        mixed_tracks.push(extra_slice);
+
+        let filename = format!("{}_extra_melody_simul.wav", base_name);
+        generate(&filename, mixed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes as f32 - extra_count as f32)
+                / total_playable_notes as f32,
+            notes: get_notes(&mixed_tracks, 1.0),
+        });
+    }
+
+    // 13. Extra Notes (Melody - Before/Anticipation)
+    if !tracks.is_empty() {
+        let melody = tracks[0];
+        let mut extra_track = Vec::new();
+        let mut extra_count = 0;
+        // Insert extra note before index 6 and 12.
+        // This means modifying the segment corresponding to 5 and 11.
+        let indices_before = [6, 12];
+
+        for (i, &(freq, dur)) in melody.iter().enumerate() {
+            // Check if NEXT note is a target
+            if i + 1 < melody.len() && indices_before.contains(&(i + 1)) {
+                let next_freq = melody[i+1].0;
+                if next_freq > 0.0 {
+                    let extra_dur = 0.15;
+                    let extra_freq = next_freq * 0.94387; // Semitone down
+                    
+                    if dur > extra_dur {
+                        extra_track.push((0.0, dur - extra_dur));
+                        extra_track.push((extra_freq, extra_dur));
+                    } else {
+                        // Duration too short to anticipate, just push silence
+                        extra_track.push((0.0, dur));
+                    }
+                    extra_count += 1;
+                } else {
+                    extra_track.push((0.0, dur));
+                }
+            } else {
+                extra_track.push((0.0, dur));
+            }
+        }
+
+        let mut mixed_tracks = tracks.to_vec();
+        let extra_slice = extra_track.as_slice();
+        mixed_tracks.push(extra_slice);
+
+        let filename = format!("{}_extra_melody_before.wav", base_name);
+        generate(&filename, mixed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes as f32 - extra_count as f32)
+                / total_playable_notes as f32,
+            notes: get_notes(&mixed_tracks, 1.0),
+        });
+    }
+
+    // 14. Extra Notes (Melody - After/Ghost)
+    if !tracks.is_empty() {
+        let melody = tracks[0];
+        let mut extra_track = Vec::new();
+        let mut extra_count = 0;
+        let indices = [4, 10];
+
+        for (i, &(freq, dur)) in melody.iter().enumerate() {
+            if indices.contains(&i) && freq > 0.0 {
+                let extra_dur = 0.08;
+                let delay = 0.08;
+                let extra_freq = freq * 0.94387; // Semitone down
+                
+                if dur > (delay + extra_dur) {
+                    extra_track.push((0.0, delay));
+                    extra_track.push((extra_freq, extra_dur));
+                    extra_track.push((0.0, dur - delay - extra_dur));
+                    extra_count += 1;
+                } else {
+                    extra_track.push((0.0, dur));
+                }
+            } else {
+                extra_track.push((0.0, dur));
+            }
+        }
+
+        let mut mixed_tracks = tracks.to_vec();
+        let extra_slice = extra_track.as_slice();
+        mixed_tracks.push(extra_slice);
+
+        let filename = format!("{}_extra_melody_after.wav", base_name);
+        generate(&filename, mixed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes as f32 - extra_count as f32)
+                / total_playable_notes as f32,
+            notes: get_notes(&mixed_tracks, 1.0),
+        });
+    }
+
+    // 15. Extra Notes (Harmony - Simultaneous)
+    if tracks.len() >= 2 {
+        let harmony = tracks[1];
+        let mut extra_track = Vec::new();
+        let mut extra_count = 0;
+        let indices = [1, 3];
+
+        for (i, &(freq, dur)) in harmony.iter().enumerate() {
+            if indices.contains(&i) && freq > 0.0 {
+                let fat_freq = freq * 1.05946; 
+                let fat_dur = 0.15;
+                if dur > fat_dur {
+                    extra_track.push((fat_freq, fat_dur));
+                    extra_track.push((0.0, dur - fat_dur));
+                } else {
+                    extra_track.push((fat_freq, dur));
+                }
+                extra_count += 1;
+            } else {
+                extra_track.push((0.0, dur));
+            }
+        }
+
+        let mut mixed_tracks = tracks.to_vec();
+        let extra_slice = extra_track.as_slice();
+        mixed_tracks.push(extra_slice);
+
+        let filename = format!("{}_extra_harmony_simul.wav", base_name);
+        generate(&filename, mixed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes as f32 - extra_count as f32)
+                / total_playable_notes as f32,
+            notes: get_notes(&mixed_tracks, 1.0),
+        });
+    }
+
+    // 16. Extra Notes (Harmony - Before)
+    if tracks.len() >= 2 {
+        let harmony = tracks[1];
+        let mut extra_track = Vec::new();
+        let mut extra_count = 0;
+        let indices_before = [2]; 
+
+        for (i, &(freq, dur)) in harmony.iter().enumerate() {
+             if i + 1 < harmony.len() && indices_before.contains(&(i + 1)) {
+                let next_freq = harmony[i+1].0;
+                if next_freq > 0.0 {
+                    let extra_dur = 0.2;
+                    let extra_freq = next_freq * 0.94387; 
+                    
+                    if dur > extra_dur {
+                        extra_track.push((0.0, dur - extra_dur));
+                        extra_track.push((extra_freq, extra_dur));
+                    } else {
+                        extra_track.push((0.0, dur));
+                    }
+                    extra_count += 1;
+                } else {
+                    extra_track.push((0.0, dur));
+                }
+            } else {
+                extra_track.push((0.0, dur));
+            }
+        }
+
+        let mut mixed_tracks = tracks.to_vec();
+        let extra_slice = extra_track.as_slice();
+        mixed_tracks.push(extra_slice);
+
+        let filename = format!("{}_extra_harmony_before.wav", base_name);
+        generate(&filename, mixed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes as f32 - extra_count as f32)
+                / total_playable_notes as f32,
+            notes: get_notes(&mixed_tracks, 1.0),
+        });
+    }
+
+    // 17. Extra Notes (Harmony - After)
+    if tracks.len() >= 2 {
+        let harmony = tracks[1];
+        let mut extra_track = Vec::new();
+        let mut extra_count = 0;
+        let indices = [0, 2];
+
+        for (i, &(freq, dur)) in harmony.iter().enumerate() {
+            if indices.contains(&i) && freq > 0.0 {
+                let extra_dur = 0.08;
+                let delay = 0.08;
+                let extra_freq = freq * 0.94387; 
+                
+                if dur > (delay + extra_dur) {
+                    extra_track.push((0.0, delay));
+                    extra_track.push((extra_freq, extra_dur));
+                    extra_track.push((0.0, dur - delay - extra_dur));
+                    extra_count += 1;
+                } else {
+                    extra_track.push((0.0, dur));
+                }
+            } else {
+                extra_track.push((0.0, dur));
+            }
+        }
+
+        let mut mixed_tracks = tracks.to_vec();
+        let extra_slice = extra_track.as_slice();
+        mixed_tracks.push(extra_slice);
+
+        let filename = format!("{}_extra_harmony_after.wav", base_name);
+        generate(&filename, mixed_tracks.clone(), 1.0);
+
+        variations.push(VariationInfo {
+            filename,
+            ideal_filename: original_filename.clone(),
+            tempo_accuracy: 1.0,
+            pitch_accuracy: (total_playable_notes as f32 - extra_count as f32)
+                / total_playable_notes as f32,
+            notes: get_notes(&mixed_tracks, 1.0),
+        });
+    }
+
     variations
 }
 
