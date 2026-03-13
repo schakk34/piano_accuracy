@@ -51,8 +51,8 @@ def _ode_to_joy_model():
     E4, F4, G4, D4, C4, C3, G3 = 64, 65, 67, 62, 60, 48, 55
     mel = [E4, E4, F4, G4, G4, F4, E4, D4, C4, C4, D4, E4, E4, D4, D4]
     mel_beats = [E_b] * 8 + [E_b] * 4 + [1.5 * E_b, 0.5 * E_b, Q_b]
-    harm = [C3, G3, C3, G3]
-    harm_beats = [4.0 * E_b] * 4
+    harm = [C3, 0, G3, 0, C3, 0, G3, 0]
+    harm_beats = [2.0 * E_b, 2.0 * E_b, 2.0 * E_b, 2.0 * E_b, 2.0 * E_b, 2.0 * E_b, 2.0 * E_b, 2.0 * E_b]
     bpm_ref = 60.0 / 0.44  # ~136.36
     return mel, mel_beats, harm, harm_beats, bpm_ref, False
 
@@ -218,6 +218,12 @@ def silence_template(n_bins):
 
 def midi_to_hz(m):
     return 440.0 * (2.0 ** ((m - 69) / 12.0))
+
+
+def midi_to_name(m: int) -> str:
+    names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    octave = (m // 12) - 1
+    return f"{names[m % 12]}{octave}"
 
 
 def hz_to_cqt_bin(hz, fmin, bins_per_octave):
@@ -708,13 +714,28 @@ def simple_segment_note_presence(
         rec["missing_midi"] = missing
         rec["extra_midi"] = extra
 
+        # Melody/harmony split (for 2-note chords: low = harmony, high = melody)
+        exp_sorted = sorted(exp_set)
+        rec["mel_note"] = exp_sorted[-1] if exp_sorted else None
+        rec["harm_note"] = exp_sorted[0] if len(exp_sorted) >= 2 else None
+        rec["mel_ok"] = rec["mel_note"] in matched_expected if rec["mel_note"] is not None else None
+        rec["harm_ok"] = rec["harm_note"] in matched_expected if rec["harm_note"] is not None else None
+
         # Classification:
-        # - any missing expected notes → segment is wrong
-        # - extras by themselves are treated as harmless (harmonics/embellishments)
+        # - fully correct
+        # - partially_missing: some but not all expected notes missing
+        # - missing: all expected notes missing
+        # - extras by themselves are treated as harmless embellishments
         if missing and extra:
-            rec["status"] = "missing_and_wrong"
+            if 0 < len(missing) < len(exp_set):
+                rec["status"] = "missing_and_wrong"  # partial + wrong
+            else:
+                rec["status"] = "missing_and_wrong"
         elif missing:
-            rec["status"] = "missing"
+            if 0 < len(missing) < len(exp_set):
+                rec["status"] = "partially_missing"
+            else:
+                rec["status"] = "missing"
         else:
             rec["status"] = "ok"
 
@@ -728,28 +749,39 @@ def print_simple_segment_notes(results, max_rows=40):
         idx = r["expected_idx"]
         status = r["status"]
         exp = r["expected_pitches"]
+        exp_names = [midi_to_name(p) for p in exp if p > 0]
         missing = r["missing_midi"]
+        missing_names = [midi_to_name(p) for p in missing]
         extra = r["extra_midi"]
+        extra_names = [midi_to_name(p) for p in extra]
         present = r["present_midi"]
-        print(f"Seg {idx:2d}  expected={exp}  status={status:16s}  present={present}", end="")
+        present_names = [midi_to_name(p) for p in present]
+        print(
+            f"Seg {idx:2d}  expected={exp} ({','.join(exp_names)})  "
+            f"status={status:16s}  present={present} ({','.join(present_names)})",
+            end="",
+        )
         if missing:
-            print(f"  missing={missing}", end="")
+            print(f"  missing={missing} ({','.join(missing_names)})", end="")
         if extra:
-            print(f"  extra={extra}", end="")
+            print(f"  extra={extra} ({','.join(extra_names)})", end="")
         print()
 
 
 def evaluate_pitch_accuracy_from_simple(simple_results):
     total = len(simple_results)
     correct_count = sum(1 for r in simple_results if r["status"] == "ok")
-    wrong_count = total - correct_count
-    accuracy = correct_count / total if total > 0 else 0.0
+    partial_count = sum(1 for r in simple_results if r["status"] == "partially_missing")
+    # scoring: ok = 1, partially_missing = 0.5, everything else = 0
+    score = correct_count * 1.0 + partial_count * 0.5
+    accuracy = score / total if total > 0 else 0.0
     skipped_count = sum(1 for r in simple_results if r["status"] == "skipped")
     return {
         "results": simple_results,
         "accuracy": accuracy,
         "correct_count": correct_count,
-        "wrong_count": wrong_count,
+        "partial_count": partial_count,
+        "wrong_count": total - correct_count - partial_count,
         "skipped_count": skipped_count,
         "total_count": total,
         "correct_segments": [r["expected_idx"] for r in simple_results if r["status"] == "ok"],
@@ -762,8 +794,9 @@ def print_accuracy_report(eval_result, show_details=True, max_rows=50):
     print("=" * 70)
     print("PITCH ACCURACY REPORT")
     print("=" * 70)
-    print(f"Overall Accuracy: {eval_result['accuracy']:.1%}")
-    print(f"Correct: {eval_result['correct_count']}/{eval_result['total_count']}")
+    print(f"Overall Accuracy (with partial credit): {eval_result['accuracy']:.1%}")
+    print(f"Correct (full): {eval_result['correct_count']}/{eval_result['total_count']}")
+    print(f"Partially correct: {eval_result.get('partial_count', 0)}/{eval_result['total_count']}")
     print(f"Skipped: {eval_result['skipped_count']}/{eval_result['total_count']}")
     print(f"Wrong:   {eval_result['wrong_count']}/{eval_result['total_count']}")
     print()
@@ -784,15 +817,19 @@ def print_accuracy_report(eval_result, show_details=True, max_rows=50):
     print("=" * 70)
 
 
-def plot_accuracy_timeline_from_simple(simple_results, title="Pitch accuracy (peak-based)"):
+def plot_accuracy_timeline_from_simple(simple_results, eval_result=None, title="Pitch accuracy (peak-based)"):
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
-    fig, ax = plt.subplots(figsize=(14, 3))
+    if eval_result is None:
+        eval_result = evaluate_pitch_accuracy_from_simple(simple_results)
+
+    fig, (ax_mel, ax_harm) = plt.subplots(2, 1, sharex=True, figsize=(14, 4))
+
     colors = {
         "ok": "green",
         "missing": "darkred",
-        "wrong": "orange",
+        "partially_missing": "coral",
         "missing_and_wrong": "purple",
         "skipped": "gray",
         "rest": "lightgray",
@@ -802,27 +839,54 @@ def plot_accuracy_timeline_from_simple(simple_results, title="Pitch accuracy (pe
         start, end = r.get("start_time"), r.get("end_time")
         if start is None or end is None:
             continue
-        status = r.get("status", "rest")
-        c = colors.get(status, "gray")
-        ax.barh(0.5, end - start, left=start, height=0.4, color=c, alpha=0.8, edgecolor="black", linewidth=0.4)
-        if status != "ok":
-            ax.text((start + end) / 2, 0.5, f"{r['expected_idx']}", ha="center", va="center", fontsize=7)
+        idx = r.get("expected_idx", 0)
+        exp = sorted(p for p in r.get("expected_pitches", ()) if p > 0)
+        if not exp:
+            continue
 
-    ax.set_xlabel("Time (seconds)")
-    ax.set_yticks([0.5])
-    ax.set_yticklabels(["Segment"])
-    ax.set_ylim(0, 1)
-    ax.set_title(title)
-    ax.grid(True, alpha=0.3, axis="x")
+        mel_note = r.get("mel_note") or (exp[-1] if exp else None)
+        harm_note = r.get("harm_note") or (exp[0] if len(exp) >= 2 else None)
+        present = set(r.get("present_midi", []))
+
+        # Melody row
+        if mel_note is not None:
+            mel_status = "ok" if mel_note in present else "missing"
+            c_mel = colors.get(mel_status, "gray")
+            ax_mel.barh(0.5, end - start, left=start, height=0.4, color=c_mel, alpha=0.8, edgecolor="black", linewidth=0.4)
+            if mel_status != "ok":
+                ax_mel.text((start + end) / 2, 0.5, f"{idx}", ha="center", va="center", fontsize=7)
+
+        # Harmony row
+        if harm_note is not None and harm_note != mel_note:
+            harm_status = "ok" if harm_note in present else "missing"
+            c_h = colors.get(harm_status, "gray")
+            ax_harm.barh(0.5, end - start, left=start, height=0.4, color=c_h, alpha=0.8, edgecolor="black", linewidth=0.4)
+            if harm_status != "ok":
+                ax_harm.text((start + end) / 2, 0.5, f"{idx}", ha="center", va="center", fontsize=7)
+
+    ax_harm.set_xlabel("Time (seconds)")
+    ax_mel.set_yticks([0.5])
+    ax_harm.set_yticks([0.5])
+    ax_mel.set_yticklabels(["Melody"])
+    ax_harm.set_yticklabels(["Harmony"])
+    ax_mel.set_ylim(0, 1)
+    ax_harm.set_ylim(0, 1)
+
+    # Overall scoring in the title
+    acc = eval_result.get("accuracy", 0.0)
+    corr = eval_result.get("correct_count", 0)
+    part = eval_result.get("partial_count", 0)
+    total = eval_result.get("total_count", 0)
+    fig.suptitle(f"{title}\nAccuracy={acc:.1%} (full={corr}, partial={part}, total={total})")
+    ax_mel.grid(True, alpha=0.3, axis="x")
+    ax_harm.grid(True, alpha=0.3, axis="x")
 
     legend_elements = [
-        Patch(facecolor="green", alpha=0.8, label="Correct (ok)"),
+        Patch(facecolor="green", alpha=0.8, label="Correct"),
         Patch(facecolor="darkred", alpha=0.8, label="Missing"),
-        Patch(facecolor="orange", alpha=0.8, label="Wrong"),
-        Patch(facecolor="purple", alpha=0.8, label="Missing + wrong"),
-        Patch(facecolor="gray", alpha=0.8, label="Skipped / rest"),
+        Patch(facecolor="coral", alpha=0.8, label="Partially missing (segment)"),
     ]
-    ax.legend(handles=legend_elements, loc="upper right", fontsize=8)
+    ax_mel.legend(handles=legend_elements, loc="upper right", fontsize=8)
     plt.tight_layout()
     plt.show()
 
@@ -841,6 +905,13 @@ def run(mp3_path: str, model_name: str, plot: bool = False):
         mel_pitches, mel_beats, harm_pitches, harm_beats, merge_adjacent_same=merge
     )
     segments = expected_segments
+
+    # Debug print: expected segment pitches and durations (in beats and seconds)
+    print("Expected segments (pitches, beats, approx_seconds):")
+    ms_per_beat = 60000.0 / bpm_ref
+    for idx, (pitches, dur_beats) in enumerate(expected_segments):
+        dur_sec = (dur_beats * ms_per_beat) / 1000.0
+        print(f"  Seg {idx:2d}: pitches={pitches}  beats={dur_beats:.3f}  ~{dur_sec:.3f}s")
 
     print(f"Loading: {mp3_path}")
     C_db, y, sr = mp3_to_cqt_db(
@@ -896,12 +967,26 @@ def run(mp3_path: str, model_name: str, plot: bool = False):
         params=params,
     )
 
+    # Actual segment durations inferred from Viterbi alignment
+    print("Actual segment durations from audio (seconds):")
+    for r in simple_results:
+        t0 = r.get("start_time")
+        t1 = r.get("end_time")
+        if t0 is None or t1 is None:
+            continue
+        dur = t1 - t0
+        print(f"  Seg {r['expected_idx']:2d}: {dur:.3f}s  status={r['status']}")
+
     print_simple_segment_notes(simple_results, max_rows=60)
     eval_simple = evaluate_pitch_accuracy_from_simple(simple_results)
     print_accuracy_report(eval_simple, show_details=True, max_rows=60)
 
     if plot:
-        plot_accuracy_timeline_from_simple(simple_results, title=f"Pitch accuracy: {mp3_path.name} (model={model_name})")
+        plot_accuracy_timeline_from_simple(
+            simple_results,
+            eval_result=eval_simple,
+            title=f"Pitch accuracy: {mp3_path.name} (model={model_name})",
+        )
 
 
 def main():
