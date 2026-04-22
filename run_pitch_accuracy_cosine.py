@@ -579,9 +579,8 @@ class NoteDetectParams:
     # octave guard
     octave_penalty_db: float = 6.0
 
-    # --- FIX: extras must be persistent, not just a spike
-    extra_presence_margin_db: float = 10.0   # extra peak must be within this of segment max (stricter)
-    extra_min_frames_ratio: float = 0.30     # and present in >= this fraction of frames
+    extra_presence_margin_db: float = 10.0 
+    extra_min_frames_ratio: float = 0.30
 
     # Adaptive loudness rescue (strict):
     # only used for expected notes that failed peak matching, mainly for long sustains.
@@ -729,9 +728,20 @@ def _low_expected_present_fallback(p, midi_energy_t, max_energy, params: NoteDet
     """
     Rescue low expected notes when exact-MIDI peak isn't detected.
     Uses nearby MIDI bins, adaptive bass margin, and persistence requirement.
+
+    Important: we search a slightly wider window than the detune tolerance so we can
+    score candidates, but the final accepted peak MUST be within the detune tolerance
+    of the expected MIDI. Otherwise a player who plays a totally different nearby
+    note (e.g. Bb2=46 when C3=48 is expected) would be falsely rescued.
     """
     if p > params.low_note_detune_cutoff_midi:
         return False
+
+    tol = (
+        params.low_note_max_detune_semitones
+        if p <= params.low_note_detune_cutoff_midi
+        else params.max_detune_semitones
+    )
 
     best_m = None
     best_score = -np.inf
@@ -752,7 +762,11 @@ def _low_expected_present_fallback(p, midi_energy_t, max_energy, params: NoteDet
         if score > best_score:
             best_score = score
             best_m = m
-    return best_m is not None
+
+    if best_m is None:
+        return False
+    # Enforce detune tolerance so a wrong nearby note is not falsely rescued.
+    return abs(best_m - p) <= tol
 
 
 def _max_consecutive_true(mask: np.ndarray) -> int:
